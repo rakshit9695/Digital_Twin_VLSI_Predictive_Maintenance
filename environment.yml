@@ -1,0 +1,62 @@
+name: digital-twin-env
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  # Core Scientific Computing
+  - python=3.10
+  - numpy>=1.24.0
+  - scipy>=1.10.0
+  - pandas>=2.0.0
+  - scikit-learn>=1.2.0
+  
+  # Data Processing & Analysis
+  - matplotlib>=3.7.0
+  - seaborn>=0.12.0
+  - plotly>=5.14.0
+  - jupyter>=1.0.0
+  - jupyterlab>=4.0.0
+  - ipython>=8.10.0
+  
+  # Hardware & Optimization
+  - numba>=0.57.0
+  - bottleneck>=1.3.0
+  - h5py>=3.8.0
+  
+  # Database & Serialization
+  - sqlalchemy>=2.0.0
+  - psycopg2>=2.9.0
+  - pyyaml>=6.0.0
+  
+  # Utilities
+  - python-dotenv>=1.0.0
+  - tqdm>=4.65.0
+  - click>=8.1.0
+  
+  # Testing & Quality
+  - pytest>=7.2.0
+  - pytest-cov>=4.0.0
+  - black>=23.0.0
+  - flake8>=6.0.0
+  - mypy>=1.0.0
+  
+  # Documentation
+  - sphinx>=6.0.0
+  - sphinx-rtd-theme>=1.2.0
+  
+  # Development
+  - ipdb>=0.13.0
+  - ipython>=8.10.0
+  - git>=2.40.0
+
+pip:
+  - redis>=4.5.0
+  - celery>=5.2.0
+  - flask>=2.3.0
+  - gunicorn>=20.1.0
+  - python-dateutil>=2.8.0
+  - requests>=2.30.0
+  - pydantic>=1.10.0
+  - cryptography>=40.0.0
+  - pydantic-settings>=2.0.0

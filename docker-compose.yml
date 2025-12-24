@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # Main Digital Twin Application
+  digital-twin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cmos-digital-twin
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+      - CONFIG_PATH=/app/config
+      - RESULTS_DIR=/app/results
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - ./results:/app/results
+      - ./data:/app/data:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - digital-twin-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import digital_twin; print('healthy')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL Database for Results Storage
+  postgres:
+    image: postgres:15-alpine
+    container_name: digital-twin-postgres
+    environment:
+      POSTGRES_USER: digital_twin
+      POSTGRES_PASSWORD: dt_secure_pwd_2025
+      POSTGRES_DB: digital_twin_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - digital-twin-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U digital_twin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache for Performance
+  redis:
+    image: redis:7-alpine
+    container_name: digital-twin-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - digital-twin-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+
+  # Jupyter Notebook for Interactive Analysis
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: digital-twin-jupyter
+    environment:
+      PYTHONUNBUFFERED: 1
+      JUPYTER_ENABLE_LAB: 1
+    volumes:
+      - ./:/app
+      - ./notebooks:/app/notebooks
+    ports:
+      - "8888:8888"
+    networks:
+      - digital-twin-network
+    command: >
+      jupyter lab
+      --ip=0.0.0.0
+      --port=8888
+      --no-browser
+      --allow-root
+      --NotebookApp.token=''
+    depends_on:
+      - digital-twin
+
+networks:
+  digital-twin-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

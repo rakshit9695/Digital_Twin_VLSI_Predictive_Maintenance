@@ -1,0 +1,374 @@
+# CMOS Digital Twin Configuration - Default (Generic)
+# This is the baseline configuration, technology-agnostic
+
+project:
+  name: "CMOS Digital Twin"
+  version: "1.0.0"
+  description: "Hidden-State Bayesian Inference for Silicon Aging"
+
+# ============================================================================
+# TECHNOLOGY & PROCESS NODE
+# ============================================================================
+
+tech_node: "generic"  # Override with specific node (7nm, 28nm)
+foundry: "undefined"  # TSMC, Intel, Samsung
+min_feature_size_nm: 0.0  # Will be set by specific config
+
+# ============================================================================
+# INFERENCE ENGINE CONFIGURATION
+# ============================================================================
+
+inference:
+  # Filter selection
+  filter_type: "ekf"  # Options: ekf, ukf, pf (particle filter)
+  
+  # EKF-specific
+  ekf:
+    use_joseph_form: true  # Numerically stable covariance update
+    
+  # UKF-specific
+  ukf:
+    alpha: 1.0e-3        # Controls sigma point spread
+    beta: 2.0            # Optimal for Gaussian
+    kappa: 0.0           # Secondary scaling
+    
+  # Particle Filter
+  particle_filter:
+    n_particles: 1000
+    resample_threshold_fraction: 0.5  # Resample if N_eff < 0.5*N
+    
+  # General settings
+  enforce_monotonic: true              # Degradation never decreases
+  log_space_states: false              # Use log transform for irreversible states
+  log_interval: 100                    # Log diagnostics every N steps
+  
+  # Convergence
+  max_iterations: 10000
+  convergence_threshold: 1.0e-6
+
+# ============================================================================
+# STATE-SPACE MODEL CONFIGURATION
+# ============================================================================
+
+state_space:
+  # Dimensions
+  n_states: 6        # [D_NBTI, D_PBTI, D_HCI, D_EM, ΔV_th, μ_deg]
+  n_observables: 3   # [f_RO, I_leak, D]
+  n_controls: 3      # [T, V_DD, α]
+  
+  # Time stepping
+  dt: 0.01           # [seconds]
+  dt_adaptive: false # Use adaptive time stepping
+  
+  # Process noise covariance (Q matrix)
+  process_noise:
+    q_degradation: 1.0e-6    # BTI, HCI, EM damage noise
+    q_th_shift: 1.0e-4       # Threshold voltage shift noise
+    q_mobility: 1.0e-5       # Mobility degradation noise
+  
+  # Measurement noise covariance (R matrix)
+  measurement_noise:
+    r_frequency: 0.1         # Ring oscillator frequency [MHz]
+    r_leakage: 1.0e-8        # Leakage current [A]
+    r_delay: 0.01            # Path delay [ns]
+  
+  # Initial state covariance (P_0)
+  initial_covariance:
+    diagonal_scale: 0.01     # P_0 = scale * I
+    
+  # Process noise scaling (can be adaptive)
+  q_scaling: 1.0             # Multiply Q by this factor
+
+# ============================================================================
+# PHYSICS MODELS - GENERAL PARAMETERS
+# ============================================================================
+
+physics:
+  boltzmann_constant: 8.617e-5  # [eV/K]
+  
+  # ────────────────────────────────────────────────────────────────────────
+  # BTI (Bias Temperature Instability) - NBTI
+  # ────────────────────────────────────────────────────────────────────────
+  
+  nbti:
+    enabled: true
+    # Stress-integrated damage law: D = ∫(V_GS^n * exp(-Ea/kT)) dt
+    voltage_exponent: 0.25        # Voltage dependence
+    time_exponent: 0.5            # Time dependence (√t)
+    prefactor: 1.0e-5             # Damage rate scale
+    activation_energy_ev: 0.12    # [eV]
+    
+    # V_th shift coefficient
+    vth_shift_coefficient: 0.15   # mV per √(D%)
+    
+    # Operating conditions
+    gate_source_voltage_nominal: -0.7  # PMOS [V]
+    temperature_threshold_k: 343   # Activation threshold
+  
+  # ────────────────────────────────────────────────────────────────────────
+  # BTI - PBTI (High-k NMOS)
+  # ────────────────────────────────────────────────────────────────────────
+  
+  pbti:
+    enabled: true
+    voltage_exponent: 0.2
+    time_exponent: 0.5
+    prefactor: 1.0e-6
+    activation_energy_ev: 0.10
+    vth_shift_coefficient: 0.12
+    gate_source_voltage_nominal: 0.6   # NMOS [V]
+    temperature_threshold_k: 343
+  
+  # ────────────────────────────────────────────────────────────────────────
+  # HCI (Hot-Carrier Injection)
+  # ────────────────────────────────────────────────────────────────────────
+  
+  hci:
+    enabled: true
+    # D_HCI = ∫(I_DS * V_DS)^m dt
+    power_exponent: 1.5           # Current-voltage product exponent
+    prefactor: 1.0e-7
+    activation_energy_ev: 0.05
+    vth_shift_coefficient: 0.05
+    
+    # Activity dependence
+    activity_exponent: 0.5        # α^0.5
+    
+    # Triggering conditions
+    min_drain_voltage_v: 0.3      # Minimum V_DS for HCI
+    current_density_normalized: 0.5
+  
+  # ────────────────────────────────────────────────────────────────────────
+  # EM (Electromigration)
+  # ────────────────────────────────────────────────────────────────────────
+  
+  em:
+    enabled: true
+    # D_EM = ∫(J^n * exp(-Ea/kT)) dt
+    current_density_exponent: 2.0
+    prefactor: 1.0e-8
+    activation_energy_ev: 0.08
+    
+    # Delay contribution
+    delay_increase_coefficient: 0.1  # ns per % damage
+    
+    # Current density normalization
+    reference_current_density: 1.0e6  # [A/cm²]
+  
+  # ────────────────────────────────────────────────────────────────────────
+  # Cross-coupling effects
+  # ────────────────────────────────────────────────────────────────────────
+  
+  coupling:
+    # V_th affects multiple degradation paths
+    vth_feedback_strength: 0.5
+    
+    # Mobility degradation from BTI
+    mu_deg_from_bti_coefficient: 0.08
+    
+    # Mobility degradation from HCI
+    mu_deg_from_hci_coefficient: 0.05
+
+# ============================================================================
+# TELEMETRY CONFIGURATION
+# ============================================================================
+
+telemetry:
+  # Sampling
+  sampling_rate_hz: 100          # Primary measurement frequency
+  buffer_size: 10000             # Samples to keep in memory
+  
+  # Nominal operating point
+  nominal:
+    frequency_mhz: 2400.0        # Ring oscillator
+    leakage_ua: 1.0e-6           # Leakage current
+    delay_ns: 2.5                # Critical path delay
+    temperature_k: 323.15        # 50°C
+    supply_voltage_v: 0.75       # V_DD
+    activity_ratio: 0.35         # 35% switching
+  
+  # Valid ranges (for outlier detection)
+  valid_ranges:
+    frequency_min_mhz: 1500
+    frequency_max_mhz: 3500
+    leakage_min_ua: 1.0e-8
+    leakage_max_ua: 100.0e-6
+    delay_min_ns: 1.0
+    delay_max_ns: 10.0
+    temperature_min_k: 273       # 0°C
+    temperature_max_k: 423       # 150°C
+    voltage_min_v: 0.6
+    voltage_max_v: 1.0
+    activity_min: 0.0
+    activity_max: 1.0
+
+# ============================================================================
+# DATA PREPROCESSING
+# ============================================================================
+
+preprocessing:
+  # Outlier detection
+  outlier_detection:
+    enabled: true
+    zscore_threshold: 3.0        # Standard deviations
+    method: "zscore"             # Options: zscore, iqr, isolation_forest
+  
+  # Normalization
+  normalization:
+    method: "percentage_deviation"  # From nominal point
+    # (raw - nominal) / nominal * 100
+  
+  # Missing data handling
+  missing_data:
+    interpolation_method: "linear"
+    max_gap_samples: 10
+  
+  # Resampling
+  resampling:
+    enabled: false
+    target_freq_hz: 100
+  
+  # Smoothing
+  smoothing:
+    enabled: false
+    window_size: 5
+    method: "gaussian"  # gaussian, moving_average
+
+# ============================================================================
+# VALIDATION & CONSISTENCY CHECKS
+# ============================================================================
+
+validation:
+  # Monotonicity constraint
+  monotonicity:
+    enabled: true
+    tolerance: 1.0e-6  # Allow small numerical violations
+  
+  # Arrhenius temperature scaling
+  arrhenius:
+    enabled: true
+    reference_temp_k: 313.15     # 40°C
+    stress_temp_k: 373.15        # 100°C
+    expected_acceleration_min: 2.0
+    expected_acceleration_max: 100.0
+  
+  # Mechanism-specific validation
+  mechanism_validation:
+    hci_activity_correlation_min: 0.3  # Should correlate with α
+    em_temperature_correlation_min: 0.5
+  
+  # Filter diagnostics
+  filter_diagnostics:
+    compute_residual_stats: true
+    compute_covariance_trace: true
+    warn_on_divergence: true
+
+# ============================================================================
+# OUTPUT & PERSISTENCE
+# ============================================================================
+
+output:
+  # Directories
+  results_dir: "outputs/results"
+  artifacts_dir: "outputs/artifacts"
+  logs_dir: "outputs/logs"
+  
+  # Export format
+  export_format: "csv"  # csv, h5, json, parquet
+  
+  # Sampling
+  save_every_n_steps: 100
+  save_covariance: true
+  save_diagnostics: true
+  
+  # File naming
+  include_timestamp: true
+  include_config_hash: true
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+
+logging:
+  level: "INFO"        # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "detailed"   # simple, detailed
+  
+  # File logging
+  log_to_file: true
+  log_file: "outputs/logs/digital_twin.log"
+  max_file_size_mb: 100
+  backup_count: 5
+  
+  # Console logging
+  log_to_console: true
+  
+  # Specific loggers
+  loggers:
+    digital_twin: "INFO"
+    filters: "INFO"
+    physics: "INFO"
+    telemetry: "WARNING"
+
+# ============================================================================
+# DEPLOYMENT & RUNTIME
+# ============================================================================
+
+deployment:
+  # Resource limits
+  max_memory_mb: 1024
+  max_cpu_cores: 4
+  
+  # Streaming
+  enable_kafka: false
+  kafka_brokers: "localhost:9092"
+  kafka_topic_input: "circuit-telemetry"
+  kafka_topic_output: "degradation-estimates"
+  
+  # Persistence
+  enable_mlflow: false
+  mlflow_tracking_uri: "http://localhost:5000"
+  
+  # API
+  enable_api: false
+  api_host: "0.0.0.0"
+  api_port: 8000
+
+# ============================================================================
+# EXPERIMENTAL FEATURES
+# ============================================================================
+
+experimental:
+  # GPU acceleration (requires PyTorch)
+  use_gpu: false
+  device: "cpu"  # "cuda" or "cpu"
+  
+  # Advanced filtering
+  use_adaptive_noise_covariance: false
+  use_multiple_hypothesis_tracking: false
+  
+  # Machine learning integration
+  use_neural_networks: false
+  nn_model_path: ""
+  
+  # Bayesian optimization
+  auto_tune_hyperparameters: false
+  tuning_objective: "residual_error"
+
+# ============================================================================
+# DEBUG & PROFILING
+# ============================================================================
+
+debug:
+  enabled: false
+  profile: false                  # Enable cProfile
+  profile_output: "outputs/profile.txt"
+  
+  # Detailed logging
+  log_state_estimates: false
+  log_observations: false
+  log_residuals: false
+  
+  # Visualization
+  plot_convergence: false
+  plot_attribution: false
+  plot_diagnostics: false
